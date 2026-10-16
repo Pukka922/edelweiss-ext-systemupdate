@@ -1,0 +1,10 @@
+{
+  "id": "systemupdate",
+  "version": "0.0.0-dev",
+  "apiVersion": 1,
+  "name": { "de": "Updates", "en": "Updates" },
+  "description": { "de": "Paketupdates und Versionswechsel für Alpine Linux", "en": "Package updates and release upgrades for Alpine Linux" },
+  "menu": { "section": "system", "order": 20, "icon": "icon.svg" },
+  "ui": { "entry": "index.js", "styles": ["style.css"], "locales": "locales" },
+  "requiresAdmin": false
+}

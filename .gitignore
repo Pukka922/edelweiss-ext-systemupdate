@@ -1,0 +1,12 @@
+/build/
+/dist/
+/go.work
+/go.work.sum
+*.test
+*.out
+.DS_Store
+
+/.superpowers/
+/docs/superpowers/
+/.claude/
+/CLAUDE.md
