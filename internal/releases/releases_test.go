@@ -119,12 +119,86 @@ func TestBannersEndDates(t *testing.T) {
 	if len(got) != 2 || got[0].Kind != "branch_eol" || got[1].Kind != "new_release" {
 		t.Fatalf("Banners(v3.20) = %+v", got)
 	}
-	// on the end date the repository has ended, the day before it ends soon
-	if got := ix.Banners("v3.24", time.Date(2026, 11, 1, 0, 0, 0, 0, time.UTC)); len(got) != 1 || got[0].Kind != "repo_eol" {
+	// v3.24 is the newest branch here: its community waits for the next release, on the end date and the day before
+	if got := ix.Banners("v3.24", time.Date(2026, 11, 1, 0, 0, 0, 0, time.UTC)); len(got) != 1 || got[0].Kind != "repo_eol_next" {
 		t.Fatalf("on the end date: %+v", got)
 	}
-	if got := ix.Banners("v3.24", time.Date(2026, 10, 31, 0, 0, 0, 0, time.UTC)); len(got) != 1 || got[0].Kind != "repo_eol_soon" {
+	if got := ix.Banners("v3.24", time.Date(2026, 10, 31, 0, 0, 0, 0, time.UTC)); len(got) != 1 || got[0].Kind != "repo_eol_next" {
 		t.Fatalf("the day before: %+v", got)
+	}
+}
+
+// repoDoc is a list whose v3.24 has a community repository with the given end date; newer adds a v3.25 after it.
+func repoDoc(t *testing.T, repoEOL string, newer bool) *Index {
+	t.Helper()
+	doc := `{"latest_stable":"v3.24","release_branches":[`
+	if newer {
+		doc = `{"latest_stable":"v3.25","release_branches":[{"rel_branch":"v3.25","eol_date":"2028-11-01"},`
+	}
+	doc += `{"rel_branch":"v3.24","eol_date":"2028-06-01","repos":[{"name":"main"},{"name":"community","eol_date":"` + repoEOL + `"}]}]}`
+	ix, err := Parse([]byte(doc))
+	if err != nil {
+		t.Fatal(err)
+	}
+	return ix
+}
+
+func TestBannersRepoNewestBranch(t *testing.T) {
+	at := time.Date(2026, 11, 5, 0, 0, 0, 0, time.UTC)
+	want := []Banner{{Kind: "repo_eol_next", Branch: "v3.24", Repo: "community", Date: "2026-11-01"}}
+	if got := repoDoc(t, "2026-11-01", false).Banners("v3.24", at); !reflect.DeepEqual(got, want) {
+		t.Fatalf("passed: %+v", got)
+	}
+	want[0].Date = "2026-12-20"
+	if got := repoDoc(t, "2026-12-20", false).Banners("v3.24", at); !reflect.DeepEqual(got, want) {
+		t.Fatalf("within 60 days: %+v", got)
+	}
+	if got := repoDoc(t, "2027-01-20", false).Banners("v3.24", at); len(got) != 0 {
+		t.Fatalf("more than 60 days ahead: %+v", got)
+	}
+}
+
+func TestBannersRepoNewerBranchListed(t *testing.T) {
+	at := time.Date(2026, 11, 5, 0, 0, 0, 0, time.UTC)
+	want := []Banner{
+		{Kind: "repo_eol", Branch: "v3.24", Repo: "community", Date: "2026-11-01"},
+		{Kind: "new_release", Branch: "v3.25", Date: "2028-11-01"},
+	}
+	if got := repoDoc(t, "2026-11-01", true).Banners("v3.24", at); !reflect.DeepEqual(got, want) {
+		t.Fatalf("passed: %+v", got)
+	}
+	want[0] = Banner{Kind: "repo_eol_soon", Branch: "v3.24", Repo: "community", Date: "2026-12-20"}
+	if got := repoDoc(t, "2026-12-20", true).Banners("v3.24", at); !reflect.DeepEqual(got, want) {
+		t.Fatalf("within 60 days: %+v", got)
+	}
+}
+
+func TestBannersRepoDateEqualOrEmpty(t *testing.T) {
+	at := time.Date(2026, 11, 5, 0, 0, 0, 0, time.UTC)
+	for _, newer := range []bool{false, true} {
+		for _, d := range []string{"", "2028-06-01"} {
+			for _, b := range repoDoc(t, d, newer).Banners("v3.24", at) {
+				if b.Repo != "" {
+					t.Fatalf("repo %q, newer %v: %+v", d, newer, b)
+				}
+			}
+		}
+	}
+}
+
+// TestBannersRealList is the shape of the real list on 2026-11-05: v3.24 is the newest branch and its community
+// repository is past its planned end – there is nothing to upgrade to, so only the soft notice shows.
+func TestBannersRealList(t *testing.T) {
+	ix, err := Parse([]byte(`{"latest_stable":"v3.24","release_branches":[
+ {"rel_branch":"edge","repos":[{"name":"main"},{"name":"community"},{"name":"testing"}]},
+ {"rel_branch":"v3.24","eol_date":"2028-06-01","repos":[{"name":"main"},{"name":"community","eol_date":"2026-11-01"}]},
+ {"rel_branch":"v3.23","eol_date":"2027-11-01","repos":[{"name":"main"},{"name":"community","eol_date":"2026-05-01"}]}]}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []Banner{{Kind: "repo_eol_next", Branch: "v3.24", Repo: "community", Date: "2026-11-01"}}
+	if got := ix.Banners("v3.24", time.Date(2026, 11, 5, 0, 0, 0, 0, time.UTC)); !reflect.DeepEqual(got, want) {
+		t.Fatalf("Banners(v3.24) = %+v", got)
 	}
 }
 
@@ -137,8 +211,8 @@ func TestBanners(t *testing.T) {
 	if got := ix.Banners("v3.23", today); !reflect.DeepEqual(got, want) {
 		t.Fatalf("Banners(v3.23) = %+v", got)
 	}
-	if got := ix.Banners("v3.24", today); len(got) != 1 || got[0].Kind != "repo_eol_soon" {
-		t.Fatalf("Banners(v3.24) = %+v", got) // community of 3.24 ends 2026-11-01, within 60 days
+	if got := ix.Banners("v3.24", today); len(got) != 1 || got[0].Kind != "repo_eol_next" {
+		t.Fatalf("Banners(v3.24) = %+v", got) // community of 3.24 ends 2026-11-01, within 60 days, no newer branch
 	}
 	if got := ix.Banners("v3.20", today); len(got) == 0 || got[0].Kind != "branch_eol" {
 		t.Fatalf("Banners(v3.20) = %+v", got)

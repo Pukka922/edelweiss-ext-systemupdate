@@ -139,6 +139,6 @@ dev-sdk:
 	rm -f go.work go.work.sum
 	$(GO) work init .
 	$(GO) work edit -replace $(SDK_MODULE)=$(EDELWEISS_ABS)/sdk
-	$(MAKE) -C $(EDELWEISS_ABS) sdk-pack
+	$(MAKE) -C $(EDELWEISS_ABS) sdk-pack VERSION=
 	v=$$(sed -n 's/^ *"version": *"\([^"]*\)".*/\1/p' $(EDELWEISS_ABS)/web/sdk/package.json) && \
 		cd ui && npm install --no-save --no-package-lock --no-audit --no-fund $(EDELWEISS_ABS)/dist/edelweiss-sdk-$$v.tgz

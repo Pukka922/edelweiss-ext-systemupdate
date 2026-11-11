@@ -222,10 +222,8 @@ export function Updates(props: { apkPollMs?: number }) {
                         job={l()}
                         arch={s().arch}
                         reboot={s().reboot}
-                        rebootBlocked={restartOff()}
                         grubDone={grubDone()}
                         onGrubDone={setGrubDone}
-                        onReboot={() => void act(() => setDialog("reboot"))}
                       />
                     )}
                   </Show>

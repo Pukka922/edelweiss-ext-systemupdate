@@ -11,43 +11,20 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-function mount(j: Job, reboot = true, blocked = false) {
+function mount(j: Job, reboot = true) {
   stubApi({});
-  const onReboot = vi.fn();
-  const view = renderExt(() => {
+  return renderExt(() => {
     const [grub, setGrub] = createSignal(false);
-    return (
-      <Result
-        job={j}
-        arch="x86_64"
-        reboot={reboot}
-        rebootBlocked={blocked}
-        grubDone={grub()}
-        onGrubDone={setGrub}
-        onReboot={onReboot}
-      />
-    );
+    return <Result job={j} arch="x86_64" reboot={reboot} grubDone={grub()} onGrubDone={setGrub} />;
   });
-  return {
-    ...view,
-    onReboot,
-    restart: () => view.getByRole("button", { name: "Restart …" }) as HTMLButtonElement,
-  };
 }
 
 describe("Result", () => {
-  it("offers the restart after a new kernel", () => {
+  it("leaves the restart after a new kernel to the banner of the page", () => {
     const view = mount(job({ status: "done", post: post() }));
-    expect(view.getByText("A restart is needed to use the new kernel.")).toBeTruthy();
-    fireEvent.click(view.restart());
-    expect(view.onReboot).toHaveBeenCalled();
-  });
-
-  it("keeps the restart button disabled while the page blocks the restart", () => {
-    const view = mount(job({ status: "done", post: post() }), true, true);
-    expect(view.restart().disabled).toBe(true);
-    fireEvent.click(view.restart());
-    expect(view.onReboot).not.toHaveBeenCalled();
+    expect(view.getByText("The job finished.")).toBeTruthy();
+    expect(view.queryByText("A restart is needed to use the new kernel.")).toBeNull();
+    expect(view.queryByRole("button", { name: "Restart …" })).toBeNull();
   });
 
   it("says not to restart when the boot files are stale", () => {
@@ -60,10 +37,22 @@ describe("Result", () => {
     const view = mount(
       job({ kind: "release", target: "v3.24", status: "done", post: post({ grub: true, grubEfi: true }) }),
     );
+    expect(view.getByText("Run grub-install before the restart:")).toBeTruthy();
     expect(view.getByText("grub-install --target=x86_64-efi --efi-directory=/boot/efi")).toBeTruthy();
-    expect(view.restart().disabled).toBe(true);
-    fireEvent.click(view.getByLabelText("I have run grub-install"));
-    expect(view.restart().disabled).toBe(false);
+    const box = view.getByLabelText("I have run grub-install") as HTMLInputElement;
+    expect(box.checked).toBe(false);
+    fireEvent.click(box);
+    expect(box.checked).toBe(true);
+    // the restart itself is the banner's: the result names only what it waits for
+    expect(view.queryByRole("button", { name: "Restart …" })).toBeNull();
+  });
+
+  it("asks for no grub-install once the host needs no restart any more", () => {
+    const view = mount(
+      job({ kind: "release", target: "v3.24", status: "done", post: post({ grub: true, grubEfi: true }) }),
+      false,
+    );
+    expect(view.queryByText("Run grub-install before the restart:")).toBeNull();
   });
 
   it("says not to restart after a partial release upgrade", () => {

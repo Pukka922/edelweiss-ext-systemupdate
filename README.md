@@ -11,7 +11,8 @@ Package updates and release upgrades for Alpine Linux, as an extension of
   checked;
 - banners for a new Alpine release (or for the end of life of the next stable branch, which is then not offered), for
   the end of life of the installed branch or of one of its repositories (also 60 days ahead), for a needed restart and
-  for a release upgrade that was left unfinished;
+  for a release upgrade that was left unfinished. While no newer stable branch is listed, the date of a repository is
+  only its planned end, as Alpine supports it until the next release, and the page says so in a warning;
 - the list of updates, with badges for security fixes and for packages that need a restart (kernel, firmware, boot
   loader);
 - **Install all**, which shows a simulation first: the packages, what would be removed or downgraded, the download size

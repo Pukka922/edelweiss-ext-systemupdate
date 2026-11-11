@@ -34,23 +34,16 @@ export const staleBoot = (j: Job | undefined) => !!j?.post && j.post.kernelChang
 /** A release upgrade to v3.24 or newer on a GRUB system: grub-install has to run before the restart. */
 export const needsGrub = (j: Job | undefined) => !!j?.post?.grub && releaseKind(j) && fromV324(j.target);
 
-/** Whether a restart after job j must wait: a partial release upgrade, stale boot files, or a missing grub-install. */
-export function rebootHeld(j: Job | undefined, grubDone: boolean): boolean {
-  return partialRelease(j) || staleBoot(j) || (needsGrub(j) && !grubDone);
-}
-
 /**
- * The result of a job, with its post-checks. reboot: the host needs a restart right now (from /status). rebootBlocked:
- * the page blocks the restart for a reason of its own (a job or apk runs, a release upgrade is not finished).
+ * The result of a job, with its post-checks. reboot: the host needs a restart right now (from /status). The restart
+ * itself is the banner's at the top of the page; the result only names what that restart waits for (grub-install).
  */
 export function Result(props: {
   job: Job;
   arch: string;
   reboot: boolean;
-  rebootBlocked: boolean;
   grubDone: boolean;
   onGrubDone: (done: boolean) => void;
-  onReboot: () => void;
 }) {
   const { t } = useI18n();
   const j = () => props.job;
@@ -82,33 +75,24 @@ export function Result(props: {
             <Show when={p().updateKernel}>
               <div class="alert alert-warning">{t("result.updateKernel")}</div>
             </Show>
-            <Show when={props.reboot && p().reboot && !staleBoot(j()) && !partialRelease(j())}>
+            <Show
+              when={props.reboot && p().reboot && needsGrub(j()) && !staleBoot(j()) && !partialRelease(j())}
+            >
               <div class="alert alert-warning flex-col items-start gap-2">
-                <span>{t("result.rebootNeeded")}</span>
-                <Show when={needsGrub(j())}>
-                  <span>{t("result.grub")}</span>
-                  <code class="rounded bg-base-300 px-2 py-1">{grubCommand(props.arch, p().grubEfi)}</code>
-                  <Show when={!p().grubEfi}>
-                    <span class="text-sm">{t("result.grubBios")}</span>
-                  </Show>
-                  <label class="flex items-center gap-2">
-                    <input
-                      type="checkbox"
-                      class="checkbox checkbox-sm"
-                      checked={props.grubDone}
-                      onChange={(e) => props.onGrubDone(e.currentTarget.checked)}
-                    />
-                    {t("result.grubDone")}
-                  </label>
+                <span>{t("result.grub")}</span>
+                <code class="rounded bg-base-300 px-2 py-1">{grubCommand(props.arch, p().grubEfi)}</code>
+                <Show when={!p().grubEfi}>
+                  <span class="text-sm">{t("result.grubBios")}</span>
                 </Show>
-                <button
-                  type="button"
-                  class="btn btn-sm btn-warning"
-                  disabled={props.rebootBlocked || rebootHeld(j(), props.grubDone)}
-                  onClick={() => props.onReboot()}
-                >
-                  {t("banner.rebootButton")}
-                </button>
+                <label class="flex items-center gap-2">
+                  <input
+                    type="checkbox"
+                    class="checkbox checkbox-sm"
+                    checked={props.grubDone}
+                    onChange={(e) => props.onGrubDone(e.currentTarget.checked)}
+                  />
+                  {t("result.grubDone")}
+                </label>
               </div>
             </Show>
             <Show when={p().apkNew.length > 0}>

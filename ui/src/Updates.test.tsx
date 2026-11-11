@@ -10,7 +10,7 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-/** The "Restart …" buttons on the page: the banner's, and the one of the result panel when it offers it. */
+/** The "Restart …" buttons on the page: only the banner has one, the result names what the restart waits for. */
 const restartButtons = (view: { queryAllByRole: (role: string, opts: { name: string }) => HTMLElement[] }) =>
   view.queryAllByRole("button", { name: "Restart …" }) as HTMLButtonElement[];
 
@@ -123,7 +123,19 @@ describe("Updates", () => {
     expect(api.posts("/refresh")).toHaveLength(0); // not even the automatic check: it would only answer 409
   });
 
-  it("keeps the restart button of the result disabled while apk of a dead runner still runs", async () => {
+  it("shows the restart once, in the banner, after a kernel upgrade", async () => {
+    stubApi(
+      base({
+        "GET /status": () => json(status({ reboot: true, last: job({ status: "done", post: post() }) })),
+      }),
+    );
+    const view = renderExt(() => <Updates />);
+    expect(await view.findByText("The job finished.")).toBeTruthy();
+    expect(view.getAllByText("A restart is needed to use the new kernel.")).toHaveLength(1);
+    await waitFor(() => expect(restartButtons(view).map((b) => b.disabled)).toEqual([false]));
+  });
+
+  it("keeps the restart disabled while apk of a dead runner still runs", async () => {
     stubApi(
       base({
         "GET /status": () =>
@@ -137,7 +149,7 @@ describe("Updates", () => {
     );
     const view = renderExt(() => <Updates />);
     expect(await view.findByText(/apk still runs \(pid 4711\)/)).toBeTruthy();
-    expect(restartButtons(view).map((b) => b.disabled)).toEqual([true, true]); // the banner's and the result's
+    expect(restartButtons(view).map((b) => b.disabled)).toEqual([true]); // the banner's
   });
 
   it("polls while apk of a dead runner still runs, and stops when it has finished", async () => {
@@ -199,9 +211,9 @@ describe("Updates", () => {
     const view = renderExt(() => <Updates />);
     const box = await view.findByLabelText("I have run grub-install"); // the result of the release job
     expect(view.getByText("grub-install --target=x86_64-efi --efi-directory=/boot/efi")).toBeTruthy();
-    expect(restartButtons(view).map((b) => b.disabled)).toEqual([true, true]); // the banner's and the result's
+    expect(restartButtons(view).map((b) => b.disabled)).toEqual([true]); // the banner's
     fireEvent.click(box);
-    expect(restartButtons(view).map((b) => b.disabled)).toEqual([false, false]);
+    expect(restartButtons(view).map((b) => b.disabled)).toEqual([false]);
   });
 
   it("keeps the restart blocked, with a banner, while the boot files are stale, whatever job came last", async () => {
@@ -472,6 +484,30 @@ describe("Updates", () => {
     ).toBeTruthy();
   });
 
+  it("warns, not alarms, that a repository ends with the next release, and still shows repo_eol as an error", async () => {
+    const next = { kind: "repo_eol_next", branch: "v3.24", repo: "community", date: "2026-11-01" } as const;
+    stubApi(base({ "GET /status": () => json(status({ banners: [next] })) }));
+    const view = renderExt(() => <Updates />);
+    const banner = await view.findByText(
+      "The community repository of Alpine v3.24 gets updates only until the next Alpine release (planned from Nov 1, 2026).",
+    );
+    expect(banner.closest(".alert")?.classList.contains("alert-warning")).toBe(true);
+    view.i18n.setLocale("de");
+    const de = view.getByText(
+      "Das Repository community von Alpine v3.24 bekommt nur noch bis zur nächsten Alpine-Version Updates (geplant ab 01.11.2026).",
+    );
+    expect(de.closest(".alert")?.classList.contains("alert-warning")).toBe(true);
+  });
+
+  it("shows repo_eol as an error", async () => {
+    stubApi(base());
+    const view = renderExt(() => <Updates />);
+    const banner = await view.findByText(
+      "The community repository of Alpine v3.23 has had no updates since May 1, 2026.",
+    );
+    expect(banner.closest(".alert")?.classList.contains("alert-error")).toBe(true);
+  });
+
   describe("for a user who cannot become admin", () => {
     const hint = "Updates are installed by an administrator in admin mode.";
     const withResult = () =>
@@ -495,7 +531,7 @@ describe("Updates", () => {
       expect(names.map((name) => (view.getByRole("button", { name }) as HTMLButtonElement).disabled)).toEqual(
         [true, true, true, true],
       );
-      expect(restartButtons(view).map((b) => b.disabled)).toEqual([true, true]); // the banner's and the result's
+      expect(restartButtons(view).map((b) => b.disabled)).toEqual([true]); // the banner's
       for (const name of names) fireEvent.click(view.getByRole("button", { name }));
       await new Promise((r) => setTimeout(r, 30));
       expect(session.calls.requestAdmin).toBe(0);
@@ -518,7 +554,7 @@ describe("Updates", () => {
       await view.findByText("curl");
       expect(view.queryByText(hint)).toBeNull();
       // the restart waits for the resume of the partial release upgrade, whoever the user is
-      expect(restartButtons(view).map((b) => b.disabled)).toEqual([true, true]);
+      expect(restartButtons(view).map((b) => b.disabled)).toEqual([true]);
       for (const name of ["Check now", "Install all", "Plan release upgrade …", "Resume …"]) {
         expect((view.getByRole("button", { name }) as HTMLButtonElement).disabled).toBe(false);
       }
@@ -540,13 +576,13 @@ describe("Updates", () => {
       const cannot = renderExt(() => <Updates />, fakeSession({ admin: false, canAdmin: false }));
       await cannot.findByText("curl");
       await loaded(api);
-      expect(restartButtons(cannot).map((b) => b.disabled)).toEqual([true, true]); // the banner's and the result's
+      expect(restartButtons(cannot).map((b) => b.disabled)).toEqual([true]); // the banner's
       cleanup();
       api = stubApi(restartable);
       const can = renderExt(() => <Updates />, fakeSession({ admin: false, canAdmin: true }));
       await can.findByText("curl");
       await loaded(api);
-      expect(restartButtons(can).map((b) => b.disabled)).toEqual([false, false]);
+      expect(restartButtons(can).map((b) => b.disabled)).toEqual([false]);
     });
   });
 

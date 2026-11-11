@@ -205,7 +205,7 @@ func (ix *Index) Targets(current string, today time.Time) []Target {
 
 // Banner is a notice for the page.
 type Banner struct {
-	Kind   string `json:"kind"` // new_release, next_release_ended, branch_eol, branch_eol_soon, repo_eol, repo_eol_soon
+	Kind   string `json:"kind"` // new_release, next_release_ended, branch_eol, branch_eol_soon, repo_eol, repo_eol_soon, repo_eol_next
 	Branch string `json:"branch"`
 	Repo   string `json:"repo,omitempty"`
 	Date   string `json:"date,omitempty"`
@@ -213,7 +213,8 @@ type Banner struct {
 
 const soon = 60 * 24 * time.Hour
 
-// Banners: the current branch, or one of its repositories, past or within 60 days of its end of life, then a newer
+// Banners: the current branch, or one of its repositories, past or within 60 days of its end of life (a repository of
+// the newest listed stable branch gets repo_eol_next instead: it is supported until the next release), then a newer
 // stable branch to upgrade to – or, when the next stable branch has reached its end of life, that fact (the page offers
 // no release upgrade then, and says why). Nothing for a nil Index.
 func (ix *Index) Banners(current string, today time.Time) []Banner {
@@ -228,9 +229,14 @@ func (ix *Index) Banners(current string, today time.Time) []Banner {
 		case expired(b.EOLDate, today.Add(soon)):
 			out = append(out, Banner{Kind: "branch_eol_soon", Branch: current, Date: b.EOLDate})
 		}
+		// With no newer stable branch listed there is nothing to upgrade to, and Alpine supports a repository until
+		// the next release: the date is only the planned one, so the page says that, not that updates have stopped.
+		hasNext := ix.next(current) != nil
 		for _, r := range b.Repos {
 			switch {
 			case r.EOLDate == "" || r.EOLDate == b.EOLDate:
+			case !hasNext && expired(r.EOLDate, today.Add(soon)):
+				out = append(out, Banner{Kind: "repo_eol_next", Branch: current, Repo: r.Name, Date: r.EOLDate})
 			case expired(r.EOLDate, today):
 				out = append(out, Banner{Kind: "repo_eol", Branch: current, Repo: r.Name, Date: r.EOLDate})
 			case expired(r.EOLDate, today.Add(soon)):

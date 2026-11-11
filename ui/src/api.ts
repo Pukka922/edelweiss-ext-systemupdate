@@ -19,7 +19,8 @@ export interface Banner {
     | "branch_eol"
     | "branch_eol_soon"
     | "repo_eol"
-    | "repo_eol_soon";
+    | "repo_eol_soon"
+    | "repo_eol_next";
   /** The installed branch; for new_release and next_release_ended the next stable branch. */
   branch: string;
   repo?: string;

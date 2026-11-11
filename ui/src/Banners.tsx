@@ -53,7 +53,7 @@ export function Banners(props: {
         {(b) => (
           <div
             class={
-              b.kind.endsWith("_soon") || b.kind === "next_release_ended"
+              b.kind.endsWith("_soon") || b.kind === "next_release_ended" || b.kind === "repo_eol_next"
                 ? "alert alert-warning"
                 : "alert alert-error"
             }
