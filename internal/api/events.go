@@ -49,6 +49,7 @@ func (a *API) events(c fiber.Ctx, s *sse.Stream) error {
 			return err
 		}
 		ended := st.Finished()
+		a.live(st)
 		for admin {
 			ev, ok := readLog(logPath, offset, ended)
 			if !ok {

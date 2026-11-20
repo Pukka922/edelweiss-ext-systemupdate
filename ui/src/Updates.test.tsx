@@ -135,6 +135,31 @@ describe("Updates", () => {
     await waitFor(() => expect(restartButtons(view).map((b) => b.disabled)).toEqual([false]));
   });
 
+  it("shows the processes that use replaced files only while the status lists them", async () => {
+    // the API drops the processes that have restarted: an empty list hides the whole block, the rest of the result stays
+    const result = (stale: { pid: number; name: string; service?: string }[]) =>
+      base({
+        "GET /status": () =>
+          json(
+            status({
+              last: job({ status: "done", post: post({ reboot: false, kernelChanged: false, stale }) }),
+            }),
+          ),
+      });
+    stubApi(result([{ pid: 812, name: "sshd", service: "sshd" }]));
+    const before = renderExt(() => <Updates />);
+    expect(await before.findByText(/still use replaced files/)).toBeTruthy();
+    expect(before.getByText("sshd (pid 812, service sshd)")).toBeTruthy();
+    cleanup();
+    vi.unstubAllGlobals();
+
+    stubApi(result([]));
+    const after = renderExt(() => <Updates />);
+    expect(await after.findByText("The job finished.")).toBeTruthy();
+    expect(after.queryByText(/still use replaced files/)).toBeNull();
+    expect(after.queryByText(/sshd/)).toBeNull();
+  });
+
   it("keeps the restart disabled while apk of a dead runner still runs", async () => {
     stubApi(
       base({

@@ -147,6 +147,7 @@ func (a *API) current(c fiber.Ctx) error {
 	if err != nil {
 		return err
 	}
+	a.live(cur)
 	return c.JSON(fiber.Map{"job": cur})
 }
 
@@ -154,6 +155,9 @@ func (a *API) list(c fiber.Ctx) error {
 	list, err := a.Store.List(20)
 	if err != nil {
 		return err
+	}
+	for i := range list {
+		a.live(&list[i])
 	}
 	return c.JSON(fiber.Map{"jobs": list})
 }

@@ -99,7 +99,9 @@ confirmation `edge`. In short:
 6. R5 to R7: the hash of `/lib/apk/db/installed` is noted, then apk-tools is upgraded, then everything (`upgrade -a`).
 7. R8: `sync`, then the checks of the result: restart needed, new `*.apk-new` files, processes that still use replaced
    libraries, removed packages and, from 3.24 on with GRUB, the notice to run `grub-install` (the restart button waits
-   for the tick that it was run).
+   for the tick that it was run). The list of processes is a snapshot, kept with the job; the API shows only those
+   that still run (same pid and start time), so it disappears once the processes have restarted, whether by a service
+   restart or a reboot. A job from before the start times were recorded loses its list at the next reboot.
 
 **When the repositories are restored, and when the job goes forward.** If R4 fails (a mirror that does not answer, an
 index that is not trusted), or R6 or R7 fail while no package has changed (apk printed no change line and the hash of

@@ -131,6 +131,7 @@ func (a *API) status(c fiber.Ctx) error {
 			break
 		}
 	}
+	a.live(st.Current, st.Last)
 	return c.JSON(st)
 }
 

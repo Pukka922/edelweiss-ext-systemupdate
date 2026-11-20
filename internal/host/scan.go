@@ -2,6 +2,7 @@ package host
 
 import (
 	"bufio"
+	"errors"
 	"io/fs"
 	"os"
 	"path/filepath"
@@ -9,6 +10,7 @@ import (
 	"strconv"
 	"strings"
 	"syscall"
+	"time"
 )
 
 // APKNew lists the configuration files apk left as *.apk-new below /etc, as absolute paths of the host.
@@ -28,11 +30,14 @@ func (f FS) APKNew() ([]string, error) {
 	return out, err
 }
 
-// Process is a process of the host; Service is its OpenRC service, when it runs in one.
+// Process is a process of the host; Service is its OpenRC service, when it runs in one. Start is its start time in
+// clock ticks after boot (field 22 of /proc/<pid>/stat; 0 in records that predate it): with the pid it tells the
+// process from a later one that got the pid.
 type Process struct {
 	PID     int    `json:"pid"`
 	Name    string `json:"name"`
 	Service string `json:"service,omitempty"`
+	Start   uint64 `json:"start,omitempty"`
 }
 
 func (f FS) pids() ([]int, error) {
@@ -52,7 +57,7 @@ func (f FS) pids() ([]int, error) {
 
 // StaleProcesses lists processes that still map a deleted library or binary below /usr or /lib: an upgrade replaced
 // it, and the process keeps the old one until it restarts. It fails when /proc cannot be listed; a process whose maps
-// cannot be read is skipped, as processes come and go.
+// or stat cannot be read is skipped, as processes come and go.
 func (f FS) StaleProcesses() ([]Process, error) {
 	ids, err := f.pids()
 	if err != nil {
@@ -78,8 +83,12 @@ func (f FS) StaleProcesses() ([]Process, error) {
 		if !stale {
 			continue
 		}
+		_, start, err := f.stat(pid)
+		if err != nil {
+			continue // gone since its maps were read: nothing to tell it by later
+		}
 		name, _ := os.ReadFile(f.path(dir + "comm"))
-		out = append(out, Process{PID: pid, Name: strings.TrimSpace(string(name)), Service: f.service(dir)})
+		out = append(out, Process{PID: pid, Name: strings.TrimSpace(string(name)), Service: f.service(dir), Start: start})
 	}
 	return out, nil
 }
@@ -135,4 +144,29 @@ func (f FS) LockHolder() (*Process, error) {
 		}
 	}
 	return nil, nil
+}
+
+// Running reports whether p is still the process that was recorded: its pid exists and started at p.Start. A record
+// without a start (written before the start was recorded) cannot be told from a process that reused the pid: false.
+// /proc/<pid>/stat is readable by everyone, unlike maps.
+func (f FS) Running(p Process) bool {
+	return p.Start != 0 && f.Alive(p.PID, p.Start)
+}
+
+// BootTime is when the host booted: the btime line of /proc/stat.
+func (f FS) BootTime() (time.Time, error) {
+	data, err := os.ReadFile(f.path("proc/stat"))
+	if err != nil {
+		return time.Time{}, err
+	}
+	for _, line := range strings.Split(string(data), "\n") {
+		if v, ok := strings.CutPrefix(line, "btime "); ok {
+			sec, err := strconv.ParseInt(strings.TrimSpace(v), 10, 64)
+			if err != nil {
+				return time.Time{}, err
+			}
+			return time.Unix(sec, 0), nil
+		}
+	}
+	return time.Time{}, errors.New("host: no btime in /proc/stat")
 }

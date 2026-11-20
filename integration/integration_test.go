@@ -195,6 +195,11 @@ func TestUpgradeOnAnOldPointRelease(t *testing.T) {
 	if err := json.Unmarshal(st.Post, &post); err != nil || post.Reboot || post.KernelChanged {
 		t.Fatalf("a container has no kernel package and never needs a restart: %s, %v", st.Post, err)
 	}
+	for _, p := range post.Stale { // the page tells by the start whether such a process still runs
+		if p.Start == 0 {
+			t.Errorf("stale process %+v has no start time", p)
+		}
+	}
 }
 
 func releaseUpgrade(t *testing.T, from, to string) {
